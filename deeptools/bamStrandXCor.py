@@ -13,7 +13,6 @@ from deeptools import parserCommon
 from deeptools.mapReduce import mapReduce
 from deeptools import bamHandler
 from deeptools.getFragmentAndReadSize import get_read_and_fragment_length
-from scipy.sparse import dok_matrix
 
 
 def parseArguments():
@@ -204,9 +203,9 @@ def getLagRegionWorker(chrom, start, end, bam=None, maxLag=None, minMappingQuali
         eY2 = eY[validY]
         # The numerator, which is just an offset dot product
         numer = np.dot(eX2, eY2) - \
-                meanY * (np.sum(eX) - np.sum(eX2)) - \
-                meanX * (np.sum(eY) - np.sum(eY2)) + \
-                meanX * meanY * (nCovered - len(px) - len(py) + len(validX))
+            meanY * (np.sum(eX) - np.sum(eX2)) - \
+            meanX * (np.sum(eY) - np.sum(eY2)) + \
+            meanX * meanY * (nCovered - len(px) - len(py) + len(validX))
 
         r.append(numer / denom)
 
@@ -300,7 +299,7 @@ def main(args=None):
 
     fig = plt.figure(figsize=(11, 9.5))
     plt.plot(x, cors)
-    plt.axvline(read_len_dict['median'], color='r', linestyle='dotted') # red line @ median read size
+    plt.axvline(read_len_dict['median'], color='r', linestyle='dotted')  # red line @ median read size
     plt.suptitle(args.plotTitle)
     plt.ylabel('Cross-correlation')
     plt.xlabel('Strand Lag')
