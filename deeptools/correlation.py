@@ -224,7 +224,7 @@ class Correlation:
 
         return self.corr_matrix
 
-    def plot_correlation(self, plot_fiilename, plot_title='', vmax=None,
+    def plot_correlation(self, plot_filename, plot_title='', vmax=None,
                          vmin=None, colormap='jet', image_format=None,
                          plot_numbers=False):
         """
@@ -322,10 +322,10 @@ class Correlation:
                                   ha='center', va='center')
 
         self.column_order = index
-        fig.savefig(plot_fiilename, format=image_format)
+        fig.savefig(plot_filename, format=image_format)
         plt.close()
 
-    def plot_scatter(self, plot_fiilename, plot_title='', image_format=None, log1p=False):
+    def plot_scatter(self, plot_filename, plot_title='', image_format=None, log1p=False):
         """
         Plot the scatter plots of a matrix
         in which each row is a sample
@@ -427,7 +427,7 @@ class Correlation:
             ax.set_ylim(min_value, ax.get_ylim()[1])
             ax.set_xlim(min_value, ax.get_xlim()[1])
 
-        plt.savefig(plot_fiilename, format=image_format)
+        plt.savefig(plot_filename, format=image_format)
         plt.close()
 
     def plot_pca(self, plot_filename, plot_title='', image_format=None, log1p=False):

@@ -28,36 +28,37 @@ def output(args=None):
     return parser
 
 
-def read_options():
+def read_options(extend=True, center=True, fragLen=True):
     """Common arguments related to BAM files and the interpretation
     of the read coverage
     """
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group('Read processing options')
 
-    group.add_argument('--extendReads', '-e',
-                       help='This parameter allows the extension of reads to '
-                       'fragment size. If set, each read is '
-                       'extended, without exception.\n'
-                       '*NOTE*: This feature is generally NOT recommended for '
-                       'spliced-read data, such as RNA-seq, as it would '
-                       'extend reads over skipped regions.\n'
-                       '*Single-end*: Requires a user specified value for the '
-                       'final fragment length. Reads that already exceed this '
-                       'fragment length will not be extended.\n'
-                       '*Paired-end*: Reads with mates are always extended to '
-                       'match the fragment size defined by the two read mates. '
-                       'Unmated reads, mate reads that map too far apart '
-                       '(>4x fragment length) or even map to different '
-                       'chromosomes are treated like single-end reads. The input '
-                       'of a fragment length value is optional. If '
-                       'no value is specified, it is estimated from the '
-                       'data (mean of the fragment size of all mate reads).\n',
-                       type=int,
-                       nargs='?',
-                       const=True,
-                       default=False,
-                       metavar="INT bp")
+    if extend:
+        group.add_argument('--extendReads', '-e',
+                           help='This parameter allows the extension of reads to '
+                           'fragment size. If set, each read is '
+                           'extended, without exception.\n'
+                           '*NOTE*: This feature is generally NOT recommended for '
+                           'spliced-read data, such as RNA-seq, as it would '
+                           'extend reads over skipped regions.\n'
+                           '*Single-end*: Requires a user specified value for the '
+                           'final fragment length. Reads that already exceed this '
+                           'fragment length will not be extended.\n'
+                           '*Paired-end*: Reads with mates are always extended to '
+                           'match the fragment size defined by the two read mates. '
+                           'Unmated reads, mate reads that map too far apart '
+                           '(>4x fragment length) or even map to different '
+                           'chromosomes are treated like single-end reads. The input '
+                           'of a fragment length value is optional. If '
+                           'no value is specified, it is estimated from the '
+                           'data (mean of the fragment size of all mate reads).\n',
+                           type=int,
+                           nargs='?',
+                           const=True,
+                           default=False,
+                           metavar="INT bp")
 
     group.add_argument('--ignoreDuplicates',
                        help='If set, reads that have the same orientation '
@@ -75,15 +76,16 @@ def read_options():
                        type=int,
                        )
 
-    group.add_argument('--centerReads',
-                       help='By adding this option, reads are centered with '
-                       'respect to the fragment length. For paired-end data, '
-                       'the read is centered at the fragment length defined '
-                       'by the two ends of the fragment. For single-end data, the '
-                       'given fragment length is used. This option is '
-                       'useful to get a sharper signal around enriched '
-                       'regions.',
-                       action='store_true')
+    if center:
+        group.add_argument('--centerReads',
+                           help='By adding this option, reads are centered with '
+                           'respect to the fragment length. For paired-end data, '
+                           'the read is centered at the fragment length defined '
+                           'by the two ends of the fragment. For single-end data, the '
+                           'given fragment length is used. This option is '
+                           'useful to get a sharper signal around enriched '
+                           'regions.',
+                           action='store_true')
 
     group.add_argument('--samFlagInclude',
                        help='Include reads based on the SAM flag. For example, '
@@ -106,25 +108,26 @@ def read_options():
                        type=int,
                        required=False)
 
-    group.add_argument('--minFragmentLength',
-                       help='The minimum fragment length needed for read/pair '
-                       'inclusion. Note that a value other than 0 will exclude '
-                       'all single-end reads. This option is primarily useful '
-                       'in ATACseq experiments, for filtering mono- or '
-                       'di-nucleosome fragments.',
-                       metavar='INT',
-                       default=0,
-                       type=int,
-                       required=False)
+    if fragLen:
+        group.add_argument('--minFragmentLength',
+                           help='The minimum fragment length needed for read/pair '
+                           'inclusion. Note that a value other than 0 will exclude '
+                           'all single-end reads. This option is primarily useful '
+                           'in ATACseq experiments, for filtering mono- or '
+                           'di-nucleosome fragments.',
+                           metavar='INT',
+                           default=0,
+                           type=int,
+                           required=False)
 
-    group.add_argument('--maxFragmentLength',
-                       help='The maximum fragment length needed for read/pair '
-                       'inclusion. A value of 0 disables filtering and is '
-                       'needed for including single-end and orphan reads.',
-                       metavar='INT',
-                       default=0,
-                       type=int,
-                       required=False)
+        group.add_argument('--maxFragmentLength',
+                           help='The maximum fragment length needed for read/pair '
+                           'inclusion. A value of 0 disables filtering and is '
+                           'needed for including single-end and orphan reads.',
+                           metavar='INT',
+                           default=0,
+                           type=int,
+                           required=False)
 
     return parser
 
