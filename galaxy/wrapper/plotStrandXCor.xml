@@ -1,0 +1,151 @@
+<tool id="deeptools_plot_strand_x_cor" name="plotStrandXCor" version="@WRAPPER_VERSION@.0">
+    <description>Plots the strand cross-correlation of an alignment file</description>
+    <macros>
+        <token name="@BINARY@">plotStrandXCor</token>
+        <import>deepTools_macros.xml</import>
+    </macros>
+    <expand macro="requirements"/>
+    <command>
+<![CDATA[
+        ln -s ${bamfile} alignments.bam && 
+        ln -s ${bamfile.metadata.bam_index} alignments.bam.bai && 
+
+        @BINARY@
+            @THREADS@
+            --bam alignments.bam
+            --plotFile "$outFileName"
+            --plotFileFormat "$outFileFormat"
+            --plotTitle '$plotTitle'
+
+            #if $outFileNameData
+                --outFileNameData "$output_outFileNameData"
+            #end if
+            #if $outFileQualityMetrics
+                --outFileQualityMetrics "$outFileQualityMetrics"
+            #end if
+
+            #if $advancedOpt.showAdvancedOpt == "yes":
+                #if $advancedOpt.maxLag:
+                    --maxLag "$maxLag"
+                #end if
+                #if $advancedOpt.minSeparation:
+                    --minSeparation "$minSeparation"
+                #end if
+
+                @blacklist@
+
+                #if str($advancedOpt.region).strip() != '':
+                    --region '$advancedOpt.region'
+                #end if
+
+                #if $advancedOpt.minMappingQuality
+                    --minMappingQuality "$advancedOpt.minMappingQuality"
+                #end if
+                #if $advancedOpt.samFlagInclude
+                    --samFlagInclude "$advancedOpt.samFlagInclude"
+                #end if
+                #if $advancedOpt.samFlagExclude
+                    --samFlagExclude "$advancedOpt.samFlagExclude"
+                #end if
+                $advancedOpt.ignoreDuplicates
+            #end if
+
+]]>
+    </command>
+    <inputs>
+        <param argument="--bam" type="data" format="bam" label="BAM file" help="" />
+        <expand macro="input_image_file_format" />
+        <expand macro="plotTitle" />
+        <param argument="--outFileNameData" type="boolean" label="Save the vector of values underlying the plot."/>
+        <param argument="--outFileQualityMetrics" type="boolean" label="Save the quality metrics. The columns are: the file name
+                        (FileName), the number of reads sampled (numReads),
+                        the position of the background peak (estFragLen),
+                        correlation coefficient at the peak (corr_estFragLen),
+                        read length/phantom peak position (phantomPeak),
+                        correlation at the phantomPeak location
+                        (corr_phantomPeak), ratio of median read length to
+                        phantom peak length (argmin_corr), minimum correlation
+                        (min_corr), normalized strand cross-correlation (NSC),
+                        relative strand cross-correlation (RSC), quality tag
+                        according to RSC (-2: very low, -1: low, 0: medium, 1:
+                        high, 2: very high)" />
+        <conditional name="advancedOpt">
+            <param name="showAdvancedOpt" type="select" label="Show advanced options" >
+                <option value="no" selected="true">no</option>
+                <option value="yes">yes</option>
+            </param>
+            <when value="no" />
+            <when value="yes">
+                <param argument="--maxLag" type="integer" value="500" min="100" label="The maximum strand lag to use"
+                    help="The maximum lag to use for computing the cross-correlation. Apparent peaks on one strand will be shifted by at most this amount." />
+                <param argument="--minSeparation" type="integer" value="10" min="1" label="Minimum separation between peaks"
+                    help="The minimum distance between the median read length and the fragment length. This is used to more easily find the read and background correlation peaks. The minimum value is 1." />
+                <expand macro="blacklist" />
+                <expand macro="region_limit_operation" />
+                <expand macro="minMappingQuality" />
+                <expand macro="samFlags" />
+                <expand macro="ignoreDuplicates" />
+            </when>
+        </conditional>
+    </inputs>
+    <outputs>
+        <expand macro="output_image_file_format_not_nested" />
+        <data format="tabular" name="output_outFileNameData" label="${tool.name} on ${on_string}: Raw lag values">
+            <filter>outFileNameData</filter>
+        </data>
+        <data format="tabular" name="output_outFileQualityMetrics" label="${tool.name} on ${on_string}: Quality metrics">
+            <filter>outFileQualityMetrics</filter>
+        </data>
+    </outputs>
+    <tests>
+        </test>
+        <test>
+            <param name="corData" value="multiBamSummary_result2.npz" ftype="deeptools_coverage_matrix" />
+            <param name="plotTitle" value="Test Plot" />
+            <param name="outFileFormat" value="png" />
+            <param name="outFileNameData" value="True" />
+            <output name="outFileName" file="plotPCA_result2.png" ftpye="png" compare="sim_size" delta="4000" />
+            <output name="output_outFileNameData" file="plotPCA_result2.tabular" ftype="tabular" />
+        </test>
+    </tests>
+    <help>
+<![CDATA[
+
+What it does
+------------
+
+This tool takes alignments in BAM format and computes the cross-correlation between the signal of alignments assigned to either strand across a range of lag distances. This is a standard quality control promotoed by the ENCODE project.
+
+Output
+------
+
+The result is one plot with the pearson correlation coefficient between signals on both strands as a function of the lag between them. Note that there is typically a "phantom peak" at the read length. This and the "background peak" are annotated in the plot. Furthermore, two quality metrics (the normalized strand-correlation coefficient (NSC) and the relative strand correlation-coefficient (RSC) are given in the plot legend. See `Landt et al. 2012 <http://dx.doi.org/10.1101/gr.136184.111>`_ for details on these.
+
+If desired the, the raw data underlying the plot can be output. The resulting file will have two columns, with the lag in the first column and the correlation coefficient in the second. Further, the quality metrics can be output in an additional file. This file has the following format:
+
+1. the file name (FileName)
+2. the number of reads sampled (numReads)
+3. the position of the background peak (estFragLen)
+4. correlation coefficient at the peak (corr_estFragLen)
+5. read length/phantom peak position (phantomPeak)
+6. correlation at the phantomPeak location (corr_phantomPeak)
+7. ratio of median read length to phantom peak length (argmin_corr)
+8. minimum correlation (min_corr)
+9. normalized strand cross-correlation (NSC)
+10. relative strand cross-correlation (RSC)
+11. quality tag according to RSC (-2: very low, -1: low, 0: medium, 1: high, 2: very high)
+
+Example plot
+------------
+
+.. image:: $PATH_TO_IMAGES/plotStrandXCor.png
+   :width: 600
+   :height: 518
+
+-----
+
+@REFERENCES@
+]]>
+    </help>
+    <expand macro="citations" />
+</tool>
