@@ -9,6 +9,7 @@ matplotlib.use('Agg')
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['svg.fonttype'] = 'none'
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from deeptools import parserCommon
 from deeptools.mapReduce import mapReduce
 from deeptools import bamHandler
@@ -263,6 +264,9 @@ def main(args=None):
                                                                 numberOfProcessors=args.numberOfProcessors,
                                                                 verbose=args.verbose)
 
+    if args.maxLag - args.minSeparation - read_len_dict['median'] - 1 < 1:
+        sys.exit("--maxLag must be more than the median read length ({}) plus --minSeparation.\n".format(read_len_dict['median']))
+
     if frag_len_dict is not None:
         sys.stderr.write("Warning: A paired-end dataset is being used. It is advisable to use only read #1 or #2, but not both!\n")
 
@@ -292,7 +296,9 @@ def main(args=None):
     # Get the values needed for NSC and RSC
     minCor = min(cors)
     readCor = max(cors[:int(read_len_dict['median']) + args.minSeparation])
-    fragCor = max(cors[int(read_len_dict['median']) + args.minSeparation:])
+    smoothed = np.convolve(cors, np.ones((3,)) / 3, mode='valid')  # The first/last 2 bases are trimmed by this
+    fragCor = np.max(smoothed[int(read_len_dict['median']) - 1 + args.minSeparation:])
+    fragCorX = np.argmax(smoothed[int(read_len_dict['median']) - 1 + args.minSeparation:]) + int(read_len_dict['median']) - 1 + args.minSeparation
     NSC = fragCor / float(minCor)
     RSC = (fragCor - minCor) / float(readCor - minCor)
     print("normalized strand coefficient (NSC): {}\nrelative strand correlation (RSC): {}".format(NSC, RSC))
@@ -300,6 +306,11 @@ def main(args=None):
     fig = plt.figure(figsize=(11, 9.5))
     plt.plot(x, cors)
     plt.axvline(read_len_dict['median'], color='r', linestyle='dotted')  # red line @ median read size
+    rline = plt.axhline(readCor, color='r', linestyle='dotted')  # red line @ median read size
+    plt.axvline(fragCorX, color='blue', linestyle='dotted')  # blue line at peak fragment size
+    fline = plt.axhline(fragCor, color='blue', linestyle='dotted')  # blue line at peak fragment size
+    proxy = mpatches.Patch(color='white')
+    plt.legend([rline, fline, proxy, proxy], ["Read length peak", "Background peak", 'NSC: {}'.format(round(NSC, 3)), 'RSC: {}'.format(round(RSC, 3))])
     plt.suptitle(args.plotTitle)
     plt.ylabel('Cross-correlation')
     plt.xlabel('Strand Lag')
