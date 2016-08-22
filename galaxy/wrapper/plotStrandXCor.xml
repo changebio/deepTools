@@ -98,7 +98,6 @@
         </data>
     </outputs>
     <tests>
-        </test>
         <test>
             <param name="bam" value="bowtie2 test1.bam" />
             <param name="plotTitle" value="Test Plot" />
