@@ -99,6 +99,22 @@ def get_optional_args():
                           'values.tab.',
                           metavar="values.tab")
 
+    optional.add_argument('--outFileQualityMetrics',
+                          help='File name to which the NSC/RSC and related '
+                          'metrics are saved. The columns of this file are: '
+                          'the file name (FileName), '
+                          'the number of reads sampled (numReads), '
+                          'the position of the background peak (estFragLen), '
+                          'correlation coefficient at the peak (corr_estFragLen), '
+                          'read length/phantom peak position (phantomPeak), '
+                          'correlation at the phantomPeak location (corr_phantomPeak), '
+                          'ratio of median read length to phantom peak length (argmin_corr), '
+                          'minimum correlation (min_corr), '
+                          'normalized strand cross-correlation (NSC), '
+                          'relative strand cross-correlation (RSC), '
+                          'quality tag according to RSC (-2: very low, -1: low, 0: medium, 1: high, 2: very high)',
+                          metavar="quality.tab")
+
     optional.add_argument("--help", "-h", action="help",
                           help="show this help message and exit")
 
@@ -248,7 +264,7 @@ def getLagMatrix(bam, maxLag, region=None, blackListFileName=None, minMappingQua
         coef = res[0] / float(nTotal)
         r += res[1] * coef
 
-    return r
+    return nTotal, r
 
 
 def main(args=None):
@@ -273,16 +289,16 @@ def main(args=None):
     if args.maxLag < read_len_dict['median']:
         sys.exit("Error: the maximim lag ({}) is less than the median read length ({}). This makes absolute no sense.".format(args.maxLag, read_len_dict['median']))
 
-    cors = getLagMatrix(args.bam,
-                        args.maxLag,
-                        region=args.region,
-                        blackListFileName=args.blackListFileName,
-                        numberOfProcessors=args.numberOfProcessors,
-                        minMappingQuality=args.minMappingQuality,
-                        ignoreDuplicates=args.ignoreDuplicates,
-                        samFlag_include=args.samFlagInclude,
-                        samFlag_exclude=args.samFlagExclude,
-                        verbose=args.verbose)
+    numReads, cors = getLagMatrix(args.bam,
+                                  args.maxLag,
+                                  region=args.region,
+                                  blackListFileName=args.blackListFileName,
+                                  numberOfProcessors=args.numberOfProcessors,
+                                  minMappingQuality=args.minMappingQuality,
+                                  ignoreDuplicates=args.ignoreDuplicates,
+                                  samFlag_include=args.samFlagInclude,
+                                  samFlag_exclude=args.samFlagExclude,
+                                  verbose=args.verbose)
 
     if args.outFileNameData is not None:
         of = open(args.outFileNameData, "w")
@@ -294,23 +310,52 @@ def main(args=None):
     x = np.arange(args.maxLag + 1)
 
     # Get the values needed for NSC and RSC
-    minCor = min(cors)
-    readCor = max(cors[:int(read_len_dict['median']) + args.minSeparation])
+    minCor = np.min(cors)
+    minCorX = np.argmin(cors)
     smoothed = np.convolve(cors, np.ones((3,)) / 3, mode='valid')  # The first/last 2 bases are trimmed by this
+    readCor = np.max(smoothed[:int(read_len_dict['median']) - 1 + args.minSeparation])
+    readCorX = np.argmax(smoothed[:int(read_len_dict['median']) - 1 + args.minSeparation])
     fragCor = np.max(smoothed[int(read_len_dict['median']) - 1 + args.minSeparation:])
     fragCorX = np.argmax(smoothed[int(read_len_dict['median']) - 1 + args.minSeparation:]) + int(read_len_dict['median']) - 1 + args.minSeparation
     NSC = fragCor / float(minCor)
     RSC = (fragCor - minCor) / float(readCor - minCor)
-    print("normalized strand coefficient (NSC): {}\nrelative strand correlation (RSC): {}".format(NSC, RSC))
+    if args.outFileQualityMetrics is not None:
+        if RSC < 0:
+            QualityTag = "NA"
+        elif RSC < 0.25:
+            QualityTag = -2
+        elif RSC < 0.5:
+            QualityTag = -1
+        elif RSC < 1:
+            QualityTag = 0
+        elif RSC < 1.5:
+            QualityTag = 1
+        else:
+            QualityTag = 2
+
+        of = open(args.outFileQualityMetrics, "w")
+        of.write("FileName\tnumReads\testFragLen\tcorr_estFragLen\tphantomPeak\tcorr_phantomPeak\targmin_corr\tmin_corr\tNSC\tRSC\tQualityTag\n")
+        of.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(args.bam,
+                                                                       numReads,
+                                                                       fragCorX,
+                                                                       fragCor,
+                                                                       readCorX,
+                                                                       readCor,
+                                                                       minCorX,
+                                                                       minCor,
+                                                                       NSC,
+                                                                       RSC,
+                                                                       QualityTag))
+        of.close()
 
     fig = plt.figure(figsize=(11, 9.5))
     plt.plot(x, cors)
-    plt.axvline(read_len_dict['median'], color='r', linestyle='dotted')  # red line @ median read size
+    plt.axvline(readCorX, color='r', linestyle='dotted')  # red line @ median read size
     rline = plt.axhline(readCor, color='r', linestyle='dotted')  # red line @ median read size
     plt.axvline(fragCorX, color='blue', linestyle='dotted')  # blue line at peak fragment size
     fline = plt.axhline(fragCor, color='blue', linestyle='dotted')  # blue line at peak fragment size
     proxy = mpatches.Patch(color='white')
-    plt.legend([rline, fline, proxy, proxy], ["Read length peak", "Background peak", 'NSC: {}'.format(round(NSC, 3)), 'RSC: {}'.format(round(RSC, 3))])
+    plt.legend([rline, fline, proxy, proxy], ["phantom peak", "background peak", 'NSC: {}'.format(round(NSC, 3)), 'RSC: {}'.format(round(RSC, 3))])
     plt.suptitle(args.plotTitle)
     plt.ylabel('Cross-correlation')
     plt.xlabel('Strand Lag')
