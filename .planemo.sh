@@ -31,5 +31,6 @@ galaxy/wrapper/plotEnrichment.xml \
 galaxy/wrapper/plotFingerprint.xml \
 galaxy/wrapper/plotHeatmap.xml \
 galaxy/wrapper/plotPCA.xml \
-galaxy/wrapper/plotProfiler.xml 2>&1 | grep -v -e "^galaxy" | grep -v -e "^requests"
+galaxy/wrapper/plotProfiler.xml \
+galaxy/wrapper/plotStrandXCor.xml 2>&1 | grep -v -e "^galaxy" | grep -v -e "^requests"
 test ${PIPESTATUS[0]} -eq 0

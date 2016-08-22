@@ -1,0 +1,2 @@
+FileName	numReads	estFragLen	corr_estFragLen	phantomPeak	corr_phantomPeak	argmin_corr	min_corr	NSC	RSC	QualityTag
+correctGCBias_result1.bam	12565	147	0.0741824045428	38	0.056768211176	2	-0.121002185083	-0.613066652409	1.09795890504	1

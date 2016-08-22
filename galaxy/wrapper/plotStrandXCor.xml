@@ -100,12 +100,14 @@
     <tests>
         </test>
         <test>
-            <param name="corData" value="multiBamSummary_result2.npz" ftype="deeptools_coverage_matrix" />
+            <param name="bam" value="bowtie2 test1.bam" />
             <param name="plotTitle" value="Test Plot" />
             <param name="outFileFormat" value="png" />
             <param name="outFileNameData" value="True" />
-            <output name="outFileName" file="plotPCA_result2.png" ftpye="png" compare="sim_size" delta="4000" />
-            <output name="output_outFileNameData" file="plotPCA_result2.tabular" ftype="tabular" />
+            <param name="outFileQualityMetrics" value="True" />
+            <output name="outFileName" file="plotStrandXCor.png" ftpye="png" compare="sim_size" delta="1000" />
+            <output name="output_outFileNameData" file="plotStrandXCor.raw.tabular" ftype="tabular" />
+            <output name="output_outFileQualityMetrics" file="plotStrandXCor.metrics.tabular" ftype="tabular" />
         </test>
     </tests>
     <help>
