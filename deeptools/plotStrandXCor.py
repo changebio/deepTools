@@ -187,19 +187,21 @@ def getLagRegionWorker(chrom, start, end, bam=None, maxLag=None, minMappingQuali
         n += 1
     f.close()
 
-    if n < 2:
-        return 0, np.zeros(maxLag + 1)
-
     # Get valid positions on each strand
     px = fSignal.nonzero()[0]
     py = rSignal.nonzero()[0]
+    # If either strand has less than two sites then return None
+    if px.shape[0] < 2 or py.shape[0] < 2:
+        return 0, np.zeros(maxLag + 1)
 
-    # Filter out sites with coverage > 10x average
+    # Filter out sites with coverage > 10x average, comment the next 7 lines out to prevent that
     totalMean = (np.sum(fSignal) + np.sum(rSignal)) / float(len(px) + len(py))
     fSignal[np.where(fSignal >= 10.0 * totalMean)] = 0
     rSignal[np.where(rSignal >= 10.0 * totalMean)] = 0
     px = fSignal.nonzero()[0]
     py = rSignal.nonzero()[0]
+    if px.shape[0] < 2 or py.shape[0] < 2:
+        return 0, np.zeros(maxLag + 1)
 
     # Number of possibly covered bases
     nCovered = max(px[-1], py[-1]) - min(px[0], py[0]) + 1
