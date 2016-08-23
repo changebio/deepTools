@@ -21,8 +21,8 @@
                 --outFileNameData "$output_outFileNameData"
             #end if
             #if $outFileQualityMetrics
-                --outFileQualityMetrics "$outFileQualityMetrics"
-                #if str($label).strip != '':
+                --outFileQualityMetrics "$output_outFileQualityMetrics"
+                #if str($label).strip() != '':
                     --label '$label'
                 #else
                     --label '${bam.display_name}'
