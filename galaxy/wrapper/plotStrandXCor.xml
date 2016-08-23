@@ -22,6 +22,11 @@
             #end if
             #if $outFileQualityMetrics
                 --outFileQualityMetrics "$outFileQualityMetrics"
+                #if str($label).strip != '':
+                    --label '$label'
+                #else
+                    --label '${bam.display_name}'
+                #end if
             #end if
 
             #if $advancedOpt.showAdvancedOpt == "yes":
@@ -69,6 +74,9 @@
                         relative strand cross-correlation (RSC), quality tag
                         according to RSC (-2: very low, -1: low, 0: medium, 1:
                         high, 2: very high)" />
+        <param argument="--label" type="text" value="" size="30" optional="True"
+            label="File label"
+            help="If quality metrics are output, then this is used in the FileName column instead of the label in the history." />
         <conditional name="advancedOpt">
             <param name="showAdvancedOpt" type="select" label="Show advanced options" >
                 <option value="no" selected="true">no</option>
@@ -99,7 +107,7 @@
     </outputs>
     <tests>
         <test>
-            <param name="bam" value="bowtie2 test1.bam" />
+            <param name="bam" value="correctGCBias_result1.bam" />
             <param name="plotTitle" value="Test Plot" />
             <param name="outFileFormat" value="png" />
             <param name="outFileNameData" value="True" />

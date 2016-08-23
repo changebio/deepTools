@@ -115,6 +115,12 @@ def get_optional_args():
                           'quality tag according to RSC (-2: very low, -1: low, 0: medium, 1: high, 2: very high)',
                           metavar="quality.tab")
 
+    optional.add_argument('--label',
+                          help='If --outFileQualityMetrics is used, there is a '
+                          'column with the file name. A different label can be '
+                          'specified with this option.',
+                          metavar='foo.bam')
+
     optional.add_argument("--help", "-h", action="help",
                           help="show this help message and exit")
 
@@ -333,9 +339,14 @@ def main(args=None):
         else:
             QualityTag = 2
 
+        if args.label is not None:
+            label = args.label
+        else:
+            label = args.bam
+
         of = open(args.outFileQualityMetrics, "w")
         of.write("FileName\tnumReads\testFragLen\tcorr_estFragLen\tphantomPeak\tcorr_phantomPeak\targmin_corr\tmin_corr\tNSC\tRSC\tQualityTag\n")
-        of.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(args.bam,
+        of.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(label,
                                                                        numReads,
                                                                        fragCorX,
                                                                        fragCor,
