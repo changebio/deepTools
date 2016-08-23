@@ -7,8 +7,8 @@
     <expand macro="requirements"/>
     <command>
 <![CDATA[
-        ln -s ${bamfile} alignments.bam && 
-        ln -s ${bamfile.metadata.bam_index} alignments.bam.bai && 
+        ln -s ${bam} alignments.bam && 
+        ln -s ${bam.metadata.bam_index} alignments.bam.bai && 
 
         @BINARY@
             @THREADS@
