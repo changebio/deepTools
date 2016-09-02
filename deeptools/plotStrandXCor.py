@@ -14,6 +14,7 @@ from deeptools import parserCommon
 from deeptools.mapReduce import mapReduce
 from deeptools import bamHandler
 from deeptools.getFragmentAndReadSize import get_read_and_fragment_length
+from deeptoolsintervals import GTF
 
 
 def parseArguments():
@@ -140,7 +141,7 @@ def getLagRegionWrapper(args):
     return getLagRegionWorker(*args)
 
 
-def getLagRegionWorker(chrom, start, end, bam=None, maxLag=None, minMappingQuality=0, ignoreDuplicates=False, samFlag_include=0, samFlag_exclude=0, verbose=False):
+def getLagRegionWorker(chrom, start, end, bam=None, maxLag=1500, minMappingQuality=0, ignoreDuplicates=False, samFlag_include=0, samFlag_exclude=0, blackListFileName=None, verbose=False):
     """
     Determine the cross-correlation in a particular range, returning a tuple of (number of reads, [PCC0, PCC1, ..., PCCN]),
     where PCCX is the pearson correlation coefficient at a given lag.
@@ -177,22 +178,69 @@ def getLagRegionWorker(chrom, start, end, bam=None, maxLag=None, minMappingQuali
         prev_start_pos = (read.reference_start, read.pnext, read.is_reverse)
 
         if read.is_reverse:
-            if read.reference_end >= end:
+            if read.reference_end >= end + maxLag:
                 continue
             rSignal[read.reference_end - start] += 1
+            # This handles edge-effects without inflating the total read count or the weighting
+            if read.reference_end <= end:
+                n += 1
         else:
             if read.pos < start:
                 continue
             fSignal[read.pos - start] += 1
-        n += 1
+            if read.pos < end:
+                n += 1
     f.close()
+
+    # Handle blacklist regions
+    if blackListFileName:
+        bl = GTF(blackListFileName)
+        for reg in bl.findOverlaps(chrom, start, end):
+            if reg[0] >= start:
+                s = reg[0] - start
+            else:
+                s = 0
+            if reg[1] <= end:
+                e = reg[1] - start
+            else:
+                e = end - start
+            fSignal[s:e] = 0
+            rSignal[s:e] = 0
+        del(bl)
 
     # Get valid positions on each strand
     px = fSignal.nonzero()[0]
     py = rSignal.nonzero()[0]
     # If either strand has less than two sites then return None
     if px.shape[0] < 1 or py.shape[0] < 1:
-        return 0, np.zeros(maxLag + 1)
+        return None
+
+    # Perform the equivalent of remove.tag.anomalies, which I find to be a bad idea...
+    stt = np.sort(np.concatenate([fSignal[px], rSignal[py]]))
+    stt = stt[0:int(stt.shape[0] * (0.999))]  # Ignore the top 0.1%
+    mtc = np.mean(stt)
+    tcd = np.sqrt(np.var(stt) + 0.1)
+    thr = max(1, np.ceil(mtc + 5 * tcd))
+    thrO = max(1, np.ceil(mtc + 15 * tcd))
+    # print("thr {} thrO {} {}/{}>thr, {}/{}>thrO".format(thr, thrO, np.where(fSignal > thr)[0].shape[0], np.where(rSignal > thr)[0].shape[0], np.where(fSignal > thrO)[0].shape[0], np.where(rSignal > thrO)[0].shape[0]))
+    # print("{} / {}".format(np.where(fSignal > thr), np.where(rSignal > thr)))
+    fSignal2 = np.copy(fSignal)
+    rSignal2 = np.copy(rSignal)
+    fSignal2[np.where(fSignal2 <= thr)] = 0  # tp
+    rSignal2[np.where(rSignal2 <= thr)] = 0
+    px2 = fSignal2.nonzero()[0]
+    py2 = rSignal2.nonzero()[0]
+    foo = np.intersect1d(px2, py2, assume_unique=True)
+    fSignal2 = np.copy(fSignal)
+    rSignal2 = np.copy(rSignal)
+    fSignal2[np.where(fSignal2 < thrO)] = 0
+    rSignal2[np.where(rSignal2 < thrO)] = 0
+    px2 = fSignal2.nonzero()[0]
+    py2 = rSignal2.nonzero()[0]
+    # print("len(foo) {} len(px2) {} len(py2) {}".format(len(foo), len(px2), len(py2)))
+    it = np.union1d(foo, np.union1d(px2, py2))
+    fSignal[it] = 0
+    rSignal[it] = 0
 
     # Filter out sites with coverage > 10x average, comment the next 7 lines out to prevent that
     totalMean = (np.sum(fSignal) + np.sum(rSignal)) / float(len(px) + len(py))
@@ -201,13 +249,15 @@ def getLagRegionWorker(chrom, start, end, bam=None, maxLag=None, minMappingQuali
     px = fSignal.nonzero()[0]
     py = rSignal.nonzero()[0]
     if px.shape[0] < 1 or py.shape[0] < 1:
-        return 0, np.zeros(maxLag + 1)
+        return None
 
     # Number of possibly covered bases
     nCovered = max(px[-1], py[-1]) - min(px[0], py[0]) + 1
     # Mean and error or covered positions
     meanX = np.sum(fSignal) / float(nCovered)
     meanY = np.sum(rSignal) / float(nCovered)
+    # print([px[-1], py[-1], px[0], py[0]])
+    # print("sum(f) {} sum(r) {} meanX {} meanY {} nCovered {}".format(np.sum(fSignal), np.sum(rSignal), meanX, meanY, nCovered))
     eX = np.zeros(len(fSignal))
     eY = np.zeros(len(fSignal))
     eX[px] = fSignal[px] - meanX
@@ -215,13 +265,24 @@ def getLagRegionWorker(chrom, start, end, bam=None, maxLag=None, minMappingQuali
     # The denominator of the correlation coefficient
     denom = np.sqrt((np.dot(eX, eX) + (nCovered - len(px)) * meanX**2) *
                     (np.dot(eY, eY) + (nCovered - len(py)) * meanY**2))
+    # These need to be summed to compute the correlation coefficients, since directly doing a weighted average is incorrect
+    t = [nCovered, fSignal, rSignal, px, py]
+    # print("np.dot(eX, eX) {}".format(np.dot(eX, eX)))
+    # print("A {}".format(nCovered - len(px)))
+    # print("B {}".format(meanX**2))
+    # print("np.dot(eY, eY) {}".format(np.dot(eY, eY)))
+    # print("C {}".format(nCovered - len(py)))
+    # print("D {}".format(meanY**2))
+    # print("denom {}".format(denom))
     r = []
-    py = set(py)
+    # py = set(py)
     for lag in range(maxLag + 1):
         # match up valid values in x and y, this is a bottleneck
-        validY = np.array(list(set(px + lag).intersection(py)))
+        validY = np.intersect1d(px + lag, py, assume_unique=True)
+        # validY = np.array(list(set(px + lag).intersection(py)))
         if len(validY) == 0:
             r.append(0)
+            t.append(None)
             continue
         validX = validY - lag
         eX2 = eX[validX]
@@ -231,10 +292,15 @@ def getLagRegionWorker(chrom, start, end, bam=None, maxLag=None, minMappingQuali
             meanY * (np.sum(eX) - np.sum(eX2)) - \
             meanX * (np.sum(eY) - np.sum(eY2)) + \
             meanX * meanY * (nCovered - len(px) - len(py) + len(validX))
+        # print("lag {} np.dot(eX2, eY2) {} np.sum(eX) {} np.sum(eX2) {} np.sum(eY) {} np.sum(eY2) {}".format(lag,  np.dot(eX2, eY2), np.sum(eX), np.sum(eX2), np.sum(eY), np.sum(eY2)))
+        # print("len(px) {} len(py) {} len(validX) {}".format(len(px), len(py), len(validX)))
+        # print("numer {}".format(numer))
 
+        t.append(validX)
         r.append(numer / denom)
 
     return n, np.array(r)
+    # return n, t
 
 
 def getLagMatrix(bam, maxLag, region=None, blackListFileName=None, minMappingQuality=0, ignoreDuplicates=False, samFlag_include=0, samFlag_exclude=0, numberOfProcessors=4, verbose=False):
@@ -243,7 +309,7 @@ def getLagMatrix(bam, maxLag, region=None, blackListFileName=None, minMappingQua
 
     The cross-correlation of each region is determine and, for each, a tuple of the number
     of alignments and a list of correlation coefficients at each lag is returned. The
-    weighted average is then taken per-lag.
+    weighted average is then taken per-lag (this is the same as SPP).
 
     Note that the 5' most region of each alignment is used.
 
@@ -252,11 +318,15 @@ def getLagMatrix(bam, maxLag, region=None, blackListFileName=None, minMappingQua
     f = bamHandler.openBam(bam)
     chromSizes = [(f.references[i], f.lengths[i]) for i in range(len(f.references))]
     f.close()
-    foo = mapReduce([bam, maxLag, minMappingQuality, ignoreDuplicates, samFlag_include, samFlag_exclude, verbose],
+    maxLen = 0
+    for _ in chromSizes:
+        if _[1] > maxLen:
+            maxLen = _[1]
+
+    foo = mapReduce([bam, maxLag, minMappingQuality, ignoreDuplicates, samFlag_include, samFlag_exclude, blackListFileName, verbose],
                     getLagRegionWrapper,
                     chromSizes,
-                    genomeChunkLength=1e6,
-                    blackListFileName=blackListFileName,
+                    genomeChunkLength=maxLen,
                     region=region,
                     numberOfProcessors=numberOfProcessors,
                     verbose=verbose)
@@ -265,12 +335,61 @@ def getLagMatrix(bam, maxLag, region=None, blackListFileName=None, minMappingQua
     r = np.zeros(maxLag + 1, dtype="float64")
     # get the total number of alignments used.
     for res in foo:
-        nTotal += res[0]
+        if res is not None:
+            nTotal += res[0]
+    print("nTotal {}".format(nTotal))
+
+    # Go through the lags
+    """
+    for l in range(maxLag + 1):
+        print(l)
+        nCovered = 0
+        fSignal = np.empty(0)
+        rSignal = np.empty(0)
+        px = np.empty(0)
+        py = np.empty(0)
+        validX = np.empty(0)
+        for res in foo:
+            if res is None:
+                continue
+            res2 = res[1]  # for convenience
+            if any(v is None for v in res2):
+                continue
+            print(len(res2))
+            nCovered += res2[0]  # nCovered
+            fSignal = np.concatenate([fSignal, res2[1]])
+            rSignal = np.concatenate([rSignal, res2[2]])
+            px = np.concatenate([px, len(px) + res2[3]])
+            py = np.concatenate([py, len(py) + res2[4]])
+            validX = np.concatenate([validX, len(validX) + res2[5 + l]])
+        if px.shape[0] == 0 or py.shape[0] == 0 or validX.shape[0] == 0 or nCovered == 0:
+            continue
+
+        print("fSignal {}".format(fSignal))
+        print(nCovered)
+        meanX = np.sum(fSignal) / float(nCovered)
+        meanY = np.sum(rSignal) / float(nCovered)
+        eX[px] = fSignal[px] - meanX
+        eY[py] = rSignal[py] - meanY
+        eX2 = eX[validX]
+        eY2 = eY[validX + l]
+
+        denom = np.sqrt((np.dot(eX, eX) + (nCovered - len(px)) * meanX**2) *
+                        (np.dot(eY, eY) + (nCovered - len(py)) * meanY**2))
+
+        numer = np.dot(eX2, eY2) - \
+                meanY * (np.sum(eX) - np.sum(eX2)) - \
+                meanX * (np.sum(eY) - np.sum(eY2)) + \
+                meanX * meanY * (nCovered - len(px) - len(py) + len(validX))
+
+        r[l] = numer / denom
+    """
 
     # Go through the lags
     for res in foo:
-        coef = res[0] / float(nTotal)
-        r += res[1] * coef
+        if res is not None:
+            coef = res[0] / float(nTotal)
+            r += res[1] * coef
 
     return nTotal, r
 
